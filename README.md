@@ -5,48 +5,59 @@ Projeto de estudo/portfólio focado em backend PHP (Laravel) + práticas de DevO
 
 O problema central que justifica a arquitetura: **reserva de assento com
 concorrência** — dois compradores não podem levar o mesmo lugar (anti-overselling),
-com reserva temporária (hold) que expira.
+com reserva temporária (hold), pagamento e **compensação** quando algo falha.
 
-## Arquitetura (alvo)
-
-```
-[web Next.js] → [orders] ⇄ RabbitMQ ⇄ [inventory]
-                   ↑                        ↑
-              [payment]  [notification]  (futuras fases)
-```
-
-Comunicação entre serviços via **eventos** (RabbitMQ), padrão **saga com
-compensação**. Cada serviço é dono do próprio banco (MySQL).
-
-## Fase 1 (atual)
-
-Dois serviços Laravel trocando eventos por RabbitMQ:
+## Arquitetura
 
 ```
-POST /orders (orders)
-  → grava pedido PENDING
-  → publica OrderCreated na fila "inventory"
-
-inventory (worker) consome OrderCreated
-  → tenta hold do assento com lock pessimista (lockForUpdate)
-       assento livre    → publica SeatReserved  na fila "orders"
-       ocupado          → publica SeatRejected (TAKEN)
-       não existe       → publica SeatRejected (NOT_FOUND)
-
-orders (worker) consome SeatReserved / SeatRejected
-  → atualiza pedido para RESERVED ou REJECTED
-
-GET /orders/{id} (orders) → estado final
+[orders] ⇄ RabbitMQ ⇄ [inventory]
+   ⇅                      
+[payment]   [notification]
 ```
+
+Comunicação entre serviços via **eventos** (RabbitMQ). O `orders` é o
+**orquestrador da saga**; cada serviço é dono do próprio banco.
+
+## Saga (orquestração pelo orders)
+
+```
+POST /orders (orders) → pedido PENDING → OrderCreated → fila "inventory"
+
+inventory consome OrderCreated → hold do assento (lockForUpdate, anti-oversell)
+    livre    → SeatReserved  → fila "orders"
+    ocupado  → SeatRejected (TAKEN)     → fila "orders"
+    inexist. → SeatRejected (NOT_FOUND) → fila "orders"
+
+orders consome SeatReserved → pedido RESERVED → ChargePayment → fila "payment"
+orders consome SeatRejected → pedido REJECTED (fim)
+
+payment consome ChargePayment → cobra (mock)
+    ok    → PaymentConfirmed → fila "orders"
+    falha → PaymentFailed    → fila "orders"
+
+orders consome PaymentConfirmed → pedido CONFIRMED → OrderConfirmed → fila "notification"
+orders consome PaymentFailed    → pedido PAYMENT_FAILED → ReleaseSeat → fila "inventory"   ← COMPENSAÇÃO
+
+inventory consome ReleaseSeat → devolve o assento (free)
+notification consome OrderConfirmed → registra a notificação (log)
+```
+
+Regra mock do pagamento: **falha se `user_id` começa com `fail`**, senão aprova —
+permite exercitar o caminho feliz e a compensação.
 
 ### Serviços
 
-| Serviço | Papel | Banco |
-|---------|-------|-------|
-| `orders` | API HTTP + worker; cria pedido, orquestra | `mysql-orders` |
-| `inventory` | worker; hold de assento, anti-oversell | `mysql-inventory` |
+| Serviço | Papel | Estado |
+|---------|-------|--------|
+| `orders` | API HTTP + worker; orquestra a saga | `mysql-orders` |
+| `inventory` | worker; hold/liberação de assento, anti-oversell | `mysql-inventory` |
+| `payment` | worker; cobrança (mock) | `mysql-payment` |
+| `notification` | worker; notificação (log) | sqlite (stateless) |
 
 Assentos semeados na sessão `show-1`: `A1`..`A5`.
+
+Estados do pedido: `PENDING → RESERVED → CONFIRMED`, ou `REJECTED` (sem assento),
+ou `PAYMENT_FAILED` (pagamento falhou, assento compensado).
 
 ## Rodar
 
@@ -54,34 +65,36 @@ Assentos semeados na sessão `show-1`: `A1`..`A5`.
 docker compose up --build
 ```
 
-Sobe: RabbitMQ (+ UI), 2x MySQL, orders (HTTP), orders-worker, inventory-worker.
-
 - API orders: http://localhost:8080
 - RabbitMQ UI: http://localhost:15672 (guest / guest)
 
 ## Testar
 
 ```sh
-# 1. cria pedido de um assento livre → deve virar RESERVED
+# CAMINHO FELIZ → CONFIRMED
 curl -s -X POST http://localhost:8080/api/orders \
   -H 'Content-Type: application/json' \
   -d '{"session_id":"show-1","seat_id":"A1","user_id":"u1"}'
+# consulte o id retornado → status vai a CONFIRMED
+curl -s http://localhost:8080/api/orders/<ID>
 
-# guarde o "id" retornado, então:
-curl -s http://localhost:8080/api/orders/<ID>   # status: RESERVED
-
-# 2. tenta o MESMO assento com outro pedido → deve virar REJECTED (TAKEN)
+# OVERSELLING → REJECTED / TAKEN (mesmo assento já vendido)
 curl -s -X POST http://localhost:8080/api/orders \
   -H 'Content-Type: application/json' \
   -d '{"session_id":"show-1","seat_id":"A1","user_id":"u2"}'
-# consulte esse novo id → status: REJECTED, reason: TAKEN
+
+# PAGAMENTO FALHA → PAYMENT_FAILED + assento liberado (compensação)
+curl -s -X POST http://localhost:8080/api/orders \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id":"show-1","seat_id":"A2","user_id":"failuser"}'
+# esse pedido vira PAYMENT_FAILED; o assento A2 volta a "free" e pode ser vendido de novo
 ```
 
 ## Stack
 
 - **Laravel 13 / PHP 8.3** — serviços
 - **RabbitMQ** — mensageria (`vladimir-yuldashev/laravel-queue-rabbitmq`)
-- **MySQL 8** — um banco por serviço
+- **MySQL 8** — um banco por serviço com estado
 - **Docker / Docker Compose** — orquestração local
 
 ## Próximas fases

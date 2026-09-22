@@ -10,10 +10,13 @@ use Illuminate\Queue\InteractsWithQueue;
 
 /**
  * Resposta do inventory: assento reservado. Consumido por orders.
+ * Marca RESERVED e segue a saga disparando a cobrança no payment.
  */
 class SeatReserved implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
+
+    private const AMOUNT = 100.00;
 
     public function __construct(
         public string $orderId,
@@ -23,10 +26,20 @@ class SeatReserved implements ShouldQueue
 
     public function handle(): void
     {
-        Order::whereKey($this->orderId)->update([
+        $order = Order::find($this->orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        $order->update([
             'status' => 'RESERVED',
             'hold_until' => $this->holdUntil,
             'reason' => null,
         ]);
+
+        // Próximo passo da saga: cobrar.
+        ChargePayment::dispatch($order->id, $order->seat_id, $order->user_id, self::AMOUNT)
+            ->onQueue('payment');
     }
 }
