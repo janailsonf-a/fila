@@ -1,0 +1,14 @@
+#cloud-config
+package_update: true
+packages:
+  - git
+
+runcmd:
+  # Docker + plugin compose
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ${admin_username}
+  # Clona o repo e sobe a stack completa (build local na VM)
+  - git clone -b ${repo_branch} ${repo_url} /opt/fila
+  - cd /opt/fila && docker compose up -d --build
+  # Sobe de novo no boot (VM reiniciada)
+  - systemctl enable docker
