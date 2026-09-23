@@ -66,7 +66,7 @@ docker compose up --build
 ```
 
 - API orders: http://localhost:8080
-- RabbitMQ UI: http://localhost:15672 (guest / guest)
+- RabbitMQ UI: http://localhost:15672 (fila / fila)
 
 ## Testar
 

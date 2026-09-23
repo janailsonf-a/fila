@@ -34,6 +34,12 @@ variable "databases" {
   default     = ["orders", "inventory", "payment"]
 }
 
+variable "deploy_apps" {
+  description = "Cria os Container Apps. Deixar false até as imagens existirem no ACR (build-push), depois true."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags aplicadas a todos os recursos."
   type        = map(string)

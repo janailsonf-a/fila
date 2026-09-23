@@ -13,6 +13,7 @@ IaC da base do projeto Fila. Provisiona o essencial; o deploy dos serviços
 | Key Vault + segredos | `fila-kv-<sufixo>` |
 | Log Analytics | `fila-logs` |
 | Container Apps Environment | `fila-cae` |
+| Container Apps (com `deploy_apps=true`) | rabbitmq + orders + 4 workers |
 
 ## Pré-requisitos
 
@@ -33,8 +34,25 @@ export TF_VAR_rabbitmq_password='<senha-forte>'
 
 terraform init
 terraform plan
-terraform apply
+terraform apply          # onda 1: base (deploy_apps=false)
 ```
+
+### Deploy em 2 ondas
+
+Os Container Apps só sobem depois que as imagens existem no ACR:
+
+```sh
+# Onda 1 — base (cria ACR, MySQL, Key Vault, env)
+terraform apply
+
+# → rode o build-push (via GitHub Actions, após OIDC) para publicar as imagens
+#   no ACR. Veja ../../docs/CICD.md
+
+# Onda 2 — sobe os serviços
+terraform apply -var deploy_apps=true
+```
+
+`terraform output orders_url` mostra a URL pública da API.
 
 Ao terminar de testar, para não gastar crédito:
 

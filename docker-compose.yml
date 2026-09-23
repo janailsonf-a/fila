@@ -14,8 +14,8 @@ x-orders-env: &orders-env
   QUEUE_CONNECTION: rabbitmq
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
+  RABBITMQ_USER: fila
+  RABBITMQ_PASSWORD: fila
 
 x-inventory-env: &inventory-env
   APP_ENV: local
@@ -30,8 +30,8 @@ x-inventory-env: &inventory-env
   QUEUE_CONNECTION: rabbitmq
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
+  RABBITMQ_USER: fila
+  RABBITMQ_PASSWORD: fila
 
 x-payment-env: &payment-env
   APP_ENV: local
@@ -46,8 +46,8 @@ x-payment-env: &payment-env
   QUEUE_CONNECTION: rabbitmq
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
+  RABBITMQ_USER: fila
+  RABBITMQ_PASSWORD: fila
 
 x-notification-env: &notification-env
   APP_ENV: local
@@ -58,8 +58,8 @@ x-notification-env: &notification-env
   QUEUE_CONNECTION: rabbitmq
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
+  RABBITMQ_USER: fila
+  RABBITMQ_PASSWORD: fila
 
 x-mysql-health: &mysql-health
   test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
@@ -70,8 +70,12 @@ x-mysql-health: &mysql-health
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    environment:
+      # guest só vale em localhost; usuário próprio funciona entre containers
+      RABBITMQ_DEFAULT_USER: fila
+      RABBITMQ_DEFAULT_PASS: fila
     ports:
-      - "15672:15672"   # management UI (guest/guest)
+      - "15672:15672"   # management UI (fila/fila)
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
