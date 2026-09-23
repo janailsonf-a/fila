@@ -74,14 +74,14 @@ export default function Home() {
     r.sort((a, b) => a.seat_id.localeCompare(b.seat_id, undefined, { numeric: true }));
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
+    <main className="mx-auto max-w-4xl px-4 py-14">
       {/* Card do filme */}
       <section className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur">
-        <div className="flex h-36 w-24 shrink-0 items-end justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-fuchsia-600 to-rose-500 p-2 text-2xl">
+        <div className="flex h-48 w-32 shrink-0 items-end justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-fuchsia-600 to-rose-500 p-2 text-4xl">
           🎬
         </div>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight">{MOVIE}</h1>
+        <div className="min-w-0 py-1">
+          <h1 className="text-3xl font-extrabold tracking-tight">{MOVIE}</h1>
           <p className="mt-0.5 text-sm text-slate-400">{META}</p>
           <p className="mt-2 text-sm text-slate-300">{SYNOPSIS}</p>
           <span className="mt-3 inline-block rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
@@ -91,22 +91,22 @@ export default function Home() {
       </section>
 
       {/* Tela */}
-      <div className="mx-auto mt-10 max-w-md">
-        <div className="h-2 rounded-[100%] bg-gradient-to-b from-white to-slate-400 shadow-[0_0_50px_10px_rgba(255,255,255,0.25)]" />
-        <p className="mt-2 text-center text-xs tracking-[0.5em] text-slate-500">TELA</p>
+      <div className="mx-auto mt-12 max-w-2xl">
+        <div className="h-2.5 rounded-[100%] bg-gradient-to-b from-white to-slate-400 shadow-[0_0_60px_14px_rgba(255,255,255,0.28)]" />
+        <p className="mt-3 text-center text-sm tracking-[0.6em] text-slate-500">TELA</p>
       </div>
 
       {/* Mapa de assentos */}
-      <div className="mt-8 flex flex-col items-center gap-2.5">
+      <div className="mt-10 flex flex-col items-center gap-3">
         {Object.keys(rows).sort().map((row) => {
           const left = rows[row].filter((s) => Number(s.seat_id.slice(1)) <= 4);
           const right = rows[row].filter((s) => Number(s.seat_id.slice(1)) > 4);
           return (
-            <div key={row} className="flex items-center gap-4">
-              <span className="w-4 text-right text-xs text-slate-500">{row}</span>
-              <div className="flex gap-1.5">{left.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
-              <div className="w-6" />
-              <div className="flex gap-1.5">{right.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
+            <div key={row} className="flex items-center gap-5">
+              <span className="w-5 text-right text-sm text-slate-500">{row}</span>
+              <div className="flex gap-2.5">{left.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
+              <div className="w-12" />
+              <div className="flex gap-2.5">{right.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
             </div>
           );
         })}
@@ -114,7 +114,7 @@ export default function Home() {
       </div>
 
       {/* Legenda */}
-      <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs text-slate-400">
+      <div className="mt-8 flex flex-wrap justify-center gap-5 text-sm text-slate-400">
         <Legend cls="bg-emerald-900/50 border-emerald-600" label="Livre" />
         <Legend cls="bg-indigo-500 border-indigo-300" label="Selecionado" />
         <Legend cls="bg-rose-950 border-rose-900" label="Ocupado" />
@@ -127,13 +127,13 @@ export default function Home() {
 
       {/* Banner de status */}
       {order && (
-        <div className={`mx-auto mt-6 max-w-md rounded-xl border px-4 py-3 text-center text-sm font-semibold ${(BANNER[order.status] || ["", "border-white/10 text-slate-300"])[1]}`}>
+        <div className={`mx-auto mt-6 max-w-lg rounded-xl border px-4 py-3 text-center text-sm font-semibold ${(BANNER[order.status] || ["", "border-white/10 text-slate-300"])[1]}`}>
           Assento {order.seat} · {(BANNER[order.status] || [order.status])[0]}
         </div>
       )}
 
       {/* Barra de confirmação */}
-      <div className="sticky bottom-4 mx-auto mt-8 flex max-w-md items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/80 px-5 py-4 shadow-2xl backdrop-blur">
+      <div className="sticky bottom-4 mx-auto mt-8 flex max-w-lg items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/80 px-6 py-5 shadow-2xl backdrop-blur">
         <div className="text-sm">
           {selected ? (
             <>
@@ -162,7 +162,7 @@ export default function Home() {
 function Seat({ s, selected, busy, onPick }) {
   const taken = s.status === "held" || s.status === "sold";
   const isSel = selected === s.seat_id;
-  const base = "h-8 w-8 rounded-t-lg border text-[10px] font-semibold transition";
+  const base = "h-11 w-11 rounded-t-lg border text-sm font-semibold transition";
   const cls = taken
     ? "bg-rose-950 border-rose-900 text-rose-800 cursor-not-allowed"
     : isSel
