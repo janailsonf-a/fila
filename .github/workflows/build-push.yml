@@ -20,6 +20,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Só roda depois que a infra + OIDC estiverem prontos (var definida).
+    if: ${{ vars.ACR_NAME != '' }}
     strategy:
       fail-fast: false
       matrix:
