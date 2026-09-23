@@ -5,9 +5,9 @@ variable "project" {
 }
 
 variable "location" {
-  description = "Região do Azure."
+  description = "Região do Azure. A assinatura Students só permite algumas (policy): centralus, northcentralus, spaincentral, francecentral, canadacentral."
   type        = string
-  default     = "brazilsouth"
+  default     = "centralus"
 }
 
 variable "mysql_admin_user" {

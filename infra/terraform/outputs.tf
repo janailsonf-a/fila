@@ -8,16 +8,6 @@ output "acr_login_server" {
   value       = azurerm_container_registry.main.login_server
 }
 
-output "mysql_fqdn" {
-  description = "FQDN do MySQL Flexible Server."
-  value       = azurerm_mysql_flexible_server.main.fqdn
-}
-
-output "mysql_databases" {
-  description = "Bancos criados, um por serviço."
-  value       = [for db in azurerm_mysql_flexible_database.service : db.name]
-}
-
 output "key_vault_uri" {
   description = "URI do Key Vault."
   value       = azurerm_key_vault.main.vault_uri

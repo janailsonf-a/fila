@@ -4,7 +4,6 @@
 
 locals {
   acr           = azurerm_container_registry.main.login_server
-  mysql_fqdn    = azurerm_mysql_flexible_server.main.fqdn
   rabbit_uri    = "amqp://fila:${var.rabbitmq_password}@rabbitmq:5672/"
   rabbit_secret = { "rabbitmq-password" = var.rabbitmq_password }
   db_secret     = { "db-password" = var.mysql_admin_password }
@@ -15,7 +14,7 @@ locals {
     APP_ENV          = "production"
     APP_DEBUG        = "false"
     DB_CONNECTION    = "mysql"
-    DB_HOST          = local.mysql_fqdn
+    DB_HOST          = "mysql"
     DB_PORT          = "3306"
     DB_DATABASE      = db
     DB_USERNAME      = var.mysql_admin_user
@@ -46,6 +45,23 @@ locals {
       env            = { RABBITMQ_DEFAULT_USER = "fila" }
       secret_env     = { RABBITMQ_DEFAULT_PASS = "rabbitmq-password" }
       secrets        = local.rabbit_secret
+      scale_queue    = null
+    }
+
+    # MySQL (imagem custom cria os 3 bancos), ingress TCP interno.
+    # Efêmero: sem persistência (limite Students; re-migra no boot).
+    mysql = {
+      image_from_acr = true
+      image          = "${local.acr}/fila-mysql:latest"
+      command        = null
+      min            = 1
+      max            = 1
+      cpu            = 0.5
+      memory         = "1Gi"
+      ingress        = { external = false, transport = "tcp", target_port = 3306, exposed_port = 3306 }
+      env            = { MYSQL_DATABASE = "orders", MYSQL_USER = var.mysql_admin_user }
+      secret_env     = { MYSQL_PASSWORD = "db-password", MYSQL_ROOT_PASSWORD = "mysql-root" }
+      secrets        = { "db-password" = var.mysql_admin_password, "mysql-root" = var.mysql_admin_password }
       scale_queue    = null
     }
 

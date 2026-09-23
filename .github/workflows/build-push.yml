@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [orders, inventory, payment, notification]
+        service: [orders, inventory, payment, notification, mysql]
     steps:
       - uses: actions/checkout@v4
 
