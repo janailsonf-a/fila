@@ -1,5 +1,11 @@
 # Fila
 
+[![CI](https://github.com/janailsonf-a/fila/actions/workflows/ci.yml/badge.svg)](https://github.com/janailsonf-a/fila/actions/workflows/ci.yml)
+![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?logo=php&logoColor=white)
+![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Plataforma de venda de ingressos construída como **microserviços event-driven**.
 Projeto de estudo/portfólio focado em backend PHP (Laravel) + práticas de DevOps/Cloud.
 
