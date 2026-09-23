@@ -9,13 +9,22 @@ class SeatSeeder extends Seeder
 {
     public function run(): void
     {
-        $session = 'show-1';
-
+        // Sessão simples usada nos testes/curl.
         foreach (['A1', 'A2', 'A3', 'A4', 'A5'] as $seatId) {
             Seat::updateOrCreate(
-                ['session_id' => $session, 'seat_id' => $seatId],
-                ['status' => 'free', 'held_by_order' => null, 'hold_until' => null],
+                ['session_id' => 'show-1', 'seat_id' => $seatId],
+                ['status' => 'free'],
             );
+        }
+
+        // Sala de cinema: fileiras A–E, assentos 1–8 (40 lugares).
+        foreach (range('A', 'E') as $row) {
+            for ($n = 1; $n <= 8; $n++) {
+                Seat::updateOrCreate(
+                    ['session_id' => 'cinema-1', 'seat_id' => $row.$n],
+                    ['status' => 'free'],
+                );
+            }
         }
     }
 }
