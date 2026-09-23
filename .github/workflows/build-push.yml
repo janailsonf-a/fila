@@ -1,0 +1,45 @@
+name: Build & Push
+
+# Builda a imagem de cada serviço e empurra pro Azure Container Registry.
+# Login por OIDC (federated credential) — NENHUM segredo salvo no repo.
+# Requer:
+#   - infra provisionada (terraform apply) → ACR existente
+#   - OIDC configurado (scripts/azure-oidc-setup.sh)
+#   - variáveis do repo: AZURE_CLIENT_ID, AZURE_TENANT_ID,
+#     AZURE_SUBSCRIPTION_ID, ACR_NAME
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # necessário pro OIDC
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [orders, inventory, payment, notification]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Build & push
+        run: |
+          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/fila-${{ matrix.service }}"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" "services/${{ matrix.service }}"
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
