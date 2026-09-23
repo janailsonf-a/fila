@@ -1,143 +1,115 @@
-# Fila
+# Fila 🎟️
 
 [![CI](https://github.com/janailsonf-a/fila/actions/workflows/ci.yml/badge.svg)](https://github.com/janailsonf-a/fila/actions/workflows/ci.yml)
 ![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)
 ![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?logo=php&logoColor=white)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ-broker-FF6600?logo=rabbitmq&logoColor=white)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Plataforma de venda de ingressos construída como **microserviços event-driven**.
-Projeto de estudo/portfólio focado em backend PHP (Laravel) + práticas de DevOps/Cloud.
+Plataforma de venda de ingressos construída como **microserviços event-driven** —
+um estudo de arquitetura, concorrência e DevOps de ponta a ponta.
 
-O problema central que justifica a arquitetura: **reserva de assento com
-concorrência** — dois compradores não podem levar o mesmo lugar (anti-overselling),
-com reserva temporária (hold), pagamento e **compensação** quando algo falha.
+O problema que dá sentido a tudo: **reserva de assento com concorrência**. Dois
+compradores não podem levar a mesma poltrona. Isso exige controle de concorrência
+real (lock pessimista), reserva temporária (*hold*) e **compensação** quando o
+pagamento falha.
 
-## Arquitetura
+![Arquitetura](docs/img/arquitetura.png)
+
+## ✨ Destaques
+
+- **Saga com compensação** orquestrada — pagamento falhou → assento é devolvido ao estoque
+- **Anti-overselling** com lock pessimista (`lockForUpdate`) sob concorrência
+- **Um banco por serviço** (database-per-service) — acoplamento baixo
+- **Infra como código** (Terraform) + **CI/CD** com GitHub Actions e **OIDC (sem secrets)**
+- **CD staging → production com aprovação manual**
+- **Observability**: Prometheus + Grafana com métricas do RabbitMQ ao vivo
+- Testado ponta a ponta **na nuvem (Azure)**
+
+## 🏗️ Arquitetura
+
+Quatro serviços Laravel conversando por eventos via RabbitMQ. O `orders` é o
+**orquestrador da saga**:
 
 ```
-[orders] ⇄ RabbitMQ ⇄ [inventory]
-   ⇅                      
-[payment]   [notification]
+POST /orders → PENDING → OrderCreated → [inventory]
+inventory: hold do assento (anti-oversell)
+    livre → SeatReserved → [orders] → RESERVED → ChargePayment → [payment]
+    ocupado → SeatRejected → [orders] → REJECTED
+payment: cobra
+    ok → PaymentConfirmed → [orders] → CONFIRMED → OrderConfirmed → [notification]
+    falha → PaymentFailed → [orders] → PAYMENT_FAILED → ReleaseSeat → [inventory]  ← COMPENSAÇÃO
 ```
-
-Comunicação entre serviços via **eventos** (RabbitMQ). O `orders` é o
-**orquestrador da saga**; cada serviço é dono do próprio banco.
-
-## Saga (orquestração pelo orders)
-
-```
-POST /orders (orders) → pedido PENDING → OrderCreated → fila "inventory"
-
-inventory consome OrderCreated → hold do assento (lockForUpdate, anti-oversell)
-    livre    → SeatReserved  → fila "orders"
-    ocupado  → SeatRejected (TAKEN)     → fila "orders"
-    inexist. → SeatRejected (NOT_FOUND) → fila "orders"
-
-orders consome SeatReserved → pedido RESERVED → ChargePayment → fila "payment"
-orders consome SeatRejected → pedido REJECTED (fim)
-
-payment consome ChargePayment → cobra (mock)
-    ok    → PaymentConfirmed → fila "orders"
-    falha → PaymentFailed    → fila "orders"
-
-orders consome PaymentConfirmed → pedido CONFIRMED → OrderConfirmed → fila "notification"
-orders consome PaymentFailed    → pedido PAYMENT_FAILED → ReleaseSeat → fila "inventory"   ← COMPENSAÇÃO
-
-inventory consome ReleaseSeat → devolve o assento (free)
-notification consome OrderConfirmed → registra a notificação (log)
-```
-
-Regra mock do pagamento: **falha se `user_id` começa com `fail`**, senão aprova —
-permite exercitar o caminho feliz e a compensação.
-
-### Serviços
 
 | Serviço | Papel | Estado |
 |---------|-------|--------|
-| `orders` | API HTTP + worker; orquestra a saga | `mysql-orders` |
-| `inventory` | worker; hold/liberação de assento, anti-oversell | `mysql-inventory` |
-| `payment` | worker; cobrança (mock) | `mysql-payment` |
-| `notification` | worker; notificação (log) | sqlite (stateless) |
+| `orders` | API HTTP + worker; orquestra a saga | MySQL |
+| `inventory` | hold / release de assento; anti-oversell | MySQL |
+| `payment` | cobrança (mock) | MySQL |
+| `notification` | notificação (log) | stateless |
 
-Assentos semeados na sessão `show-1`: `A1`..`A5`.
-
-Estados do pedido: `PENDING → RESERVED → CONFIRMED`, ou `REJECTED` (sem assento),
-ou `PAYMENT_FAILED` (pagamento falhou, assento compensado).
-
-## Rodar
+## 🚀 Rodar local
 
 ```sh
 docker compose up --build
 ```
 
-- API orders: http://localhost:8080
+- API: http://localhost:8080
 - RabbitMQ UI: http://localhost:15672 (fila / fila)
+- Grafana: http://localhost:3000 · Prometheus: http://localhost:9090
 
-## Testar
+### Testar a saga
 
 ```sh
-# CAMINHO FELIZ → CONFIRMED
-curl -s -X POST http://localhost:8080/api/orders \
-  -H 'Content-Type: application/json' \
+# caminho feliz → CONFIRMED
+curl -s -X POST http://localhost:8080/api/orders -H 'Content-Type: application/json' \
   -d '{"session_id":"show-1","seat_id":"A1","user_id":"u1"}'
-# consulte o id retornado → status vai a CONFIRMED
-curl -s http://localhost:8080/api/orders/<ID>
 
-# OVERSELLING → REJECTED / TAKEN (mesmo assento já vendido)
-curl -s -X POST http://localhost:8080/api/orders \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"show-1","seat_id":"A1","user_id":"u2"}'
-
-# PAGAMENTO FALHA → PAYMENT_FAILED + assento liberado (compensação)
-curl -s -X POST http://localhost:8080/api/orders \
-  -H 'Content-Type: application/json' \
+# mesmo assento de novo → REJECTED / TAKEN (anti-oversell)
+# pagamento falha (user começa com "fail") → PAYMENT_FAILED + assento liberado
+curl -s -X POST http://localhost:8080/api/orders -H 'Content-Type: application/json' \
   -d '{"session_id":"show-1","seat_id":"A2","user_id":"failuser"}'
-# esse pedido vira PAYMENT_FAILED; o assento A2 volta a "free" e pode ser vendido de novo
 ```
 
-## Stack
+## 📊 Observability
 
-- **Laravel 13 / PHP 8.3** — serviços
-- **RabbitMQ** — mensageria (`vladimir-yuldashev/laravel-queue-rabbitmq`)
-- **MySQL 8** — um banco por serviço com estado
-- **Docker / Docker Compose** — orquestração local
+Dashboard Grafana provisionado com métricas do RabbitMQ — dá pra ver as mensagens
+fluindo pelas filas ao vivo (e uma fila enchendo quando um worker cai, o sinal que
+o KEDA usaria pra escalar):
 
-## Observability
+![Grafana](docs/img/grafana-filas.png)
 
-`docker compose up` também sobe **Prometheus** + **Grafana** com o plugin de
-métricas do RabbitMQ ligado:
+## 🧰 Stack
 
-- Grafana: http://localhost:3000 (anônimo em modo viewer; admin `admin`/`fila`)
-- Prometheus: http://localhost:9090
+**App:** Laravel 13 · PHP 8.3 · RabbitMQ · MySQL 8
+**DevOps:** Docker / Compose · Terraform · GitHub Actions (OIDC) · Prometheus · Grafana · Azure
 
-Dashboard **"Fila — RabbitMQ / Filas"** já provisionado: profundidade das filas
-por serviço, taxa de publicação/entrega, conexões. Dá pra ver ao vivo as
-mensagens fluindo entre os serviços ao disparar pedidos.
+## ☁️ Deploy (Azure)
 
-## Deploy na Azure (IaC)
+Toda a infra é Terraform ([`infra/`](infra)) e o pipeline em
+[`.github/workflows`](.github/workflows) — ver [`docs/CICD.md`](docs/CICD.md).
 
-Toda a infra é Terraform em [`infra/terraform`](infra/terraform) e o CI/CD em
-[`.github/workflows`](.github/workflows) (build das imagens → ACR via OIDC, sem
-segredo salvo). Ver [`docs/CICD.md`](docs/CICD.md).
+- [`infra/terraform`](infra/terraform) — caminho gerenciado (ACR, Container Apps + KEDA, MySQL Flexible, Key Vault)
+- [`infra/vm`](infra/vm) — deploy por VM + docker-compose (o que roda na Azure for Students)
 
-Estado do deploy:
+> **Nota (Azure for Students):** o Container Apps da conta é *express* (sem TCP
+> ingress) e o MySQL gerenciado não tem capacidade nas regiões liberadas. Por isso
+> o deploy que roda de fato é por **VM** — o IaC do caminho gerenciado fica pronto
+> para uma assinatura padrão. Diagnóstico completo em `docs/CICD.md` e no histórico.
 
-- ✅ Base provisionada (ACR, Key Vault, Log Analytics, Container Apps Environment)
-- ✅ Imagens buildadas e publicadas no ACR pelo GitHub Actions
-- ✅ Definição dos Container Apps (rabbitmq + mysql + orders + 4 workers) com
-  autoescala **KEDA** por fila do RabbitMQ — `terraform validate` OK
+## 🗺️ Roadmap
 
-> **Nota (Azure for Students):** o deploy final dos Container Apps esbarra em
-> limites da assinatura *Students*: o Container Apps Environment é do tipo
-> *express*, que **não suporta TCP ingress** (necessário para RabbitMQ:5672 e
-> MySQL:3306) nem pull do ACR por *managed identity*; e o **MySQL Flexible
-> gerenciado** não tem capacidade nas regiões permitidas pela policy da conta.
-> O IaC está correto e completo — em uma assinatura padrão (Pay-As-You-Go /
-> empresarial) o `terraform apply -var deploy_apps=true` sobe o ambiente inteiro.
-> Para desenvolvimento e demonstração, use o `docker compose` acima, que executa
-> a stack completa localmente.
+- [x] 1 · Serviços + mensageria local
+- [x] 2 · Saga completa com compensação
+- [x] 3 · IaC (Terraform)
+- [x] 4 · CI + OIDC
+- [x] 5 · Deploy na Azure
+- [x] 6 · CD staging → production (aprovação manual)
+- [x] 7 · Observability (Prometheus + Grafana)
+- [x] 8 · Polish
+- [ ] Frontend (Next.js)
 
-## Próximas fases
+## 📄 Licença
 
-6. CD staging→prod · 7. Observability (OpenTelemetry + Grafana) · 8. Polish.
+MIT.

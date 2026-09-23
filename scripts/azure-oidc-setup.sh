@@ -54,6 +54,9 @@ create_fic "fila-pr"   "repo:${REPO}:pull_request"
 if [ -n "$OWNER_ID" ] && [ -n "$REPO_ID" ]; then
   create_fic "fila-main-id" "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:ref:refs/heads/main"
   create_fic "fila-pr-id"   "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:pull_request"
+  # Jobs com `environment:` (usados no CD) apresentam subject de environment.
+  create_fic "fila-env-staging"    "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:environment:staging"
+  create_fic "fila-env-production" "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:environment:production"
 fi
 
 echo ">> Permissão AcrPush no ACR"
