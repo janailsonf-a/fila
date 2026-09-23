@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 const SESSION = "cinema-1";
-const MOVIE = "Homem-Aranha: Novo Dia";
+const MOVIE = "Homem-Aranha: Um Novo Dia";
 const META = "Sala 3 · 20:00 · Dublado · IMAX";
 const SYNOPSIS = "Peter Parker recomeça do zero numa Nova York que esqueceu quem ele é.";
 const PRICE = "R$ 32,00";
