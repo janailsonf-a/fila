@@ -74,6 +74,9 @@ services:
       # guest só vale em localhost; usuário próprio funciona entre containers
       RABBITMQ_DEFAULT_USER: fila
       RABBITMQ_DEFAULT_PASS: fila
+    volumes:
+      # habilita o plugin de métricas (Prometheus) em :15692
+      - ./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     ports:
       - "15672:15672"   # management UI (fila/fila)
     healthcheck:
@@ -163,3 +166,30 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: fila
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
