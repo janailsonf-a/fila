@@ -43,6 +43,26 @@ Sem senha/token guardado no GitHub. O Actions troca um token de identidade
 por um token da Azure na hora, com escopo mínimo (`AcrPush` só no ACR).
 Nada vaza se o repo vazar.
 
-## Próximo (Fase 5/6)
-Deploy nos Azure Container Apps (a App Registration vai precisar também de
-`Contributor` no `rg-fila`) e pipeline de CD staging→prod com aprovação manual.
+## CD — `.github/workflows/cd.yml`
+
+Deploy contínuo na VM em dois estágios, **staging → production**, com **aprovação
+manual** em produção. Sem SSH key: o deploy roda via `az vm run-command`
+autenticado por **OIDC** (mesmo mecanismo do build, zero segredo).
+
+Fluxo:
+1. `staging` (automático) → `git pull` + `docker compose up -d --build` na VM +
+   smoke test (`/up` responde 200).
+2. `production` → **GitHub Environment com required reviewer**: o pipeline pausa
+   e espera aprovação manual antes de promover.
+
+Trigger é manual (`workflow_dispatch`) porque a VM fica desligada fora das demos
+(economia de crédito). Rode em **Actions → CD → Run workflow** com a VM ligada.
+
+Pré-requisitos:
+- Environments `staging` e `production` (production com required reviewer) — já criados
+- Variáveis `VM_RG`, `VM_NAME` + as `AZURE_*` do OIDC
+- SP `gh-actions-fila` com `Contributor` no `rg-fila-vm` (run-command)
+
+> Observação: num setup multi-host real, staging e production apontariam para
+> máquinas distintas. Aqui, com uma VM só (restrição de crédito Students), o
+> pipeline demonstra o gate de aprovação e o fluxo de promoção no mesmo host.
