@@ -70,6 +70,7 @@ x-mysql-health: &mysql-health
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    restart: unless-stopped
     environment:
       # guest só vale em localhost; usuário próprio funciona entre containers
       RABBITMQ_DEFAULT_USER: fila
@@ -92,6 +93,7 @@ services:
       MYSQL_DATABASE: orders
       MYSQL_USER: fila
       MYSQL_PASSWORD: fila
+    restart: unless-stopped
     healthcheck: *mysql-health
 
   mysql-inventory:
@@ -101,6 +103,7 @@ services:
       MYSQL_DATABASE: inventory
       MYSQL_USER: fila
       MYSQL_PASSWORD: fila
+    restart: unless-stopped
     healthcheck: *mysql-health
 
   mysql-payment:
@@ -110,6 +113,7 @@ services:
       MYSQL_DATABASE: payment
       MYSQL_USER: fila
       MYSQL_PASSWORD: fila
+    restart: unless-stopped
     healthcheck: *mysql-health
 
   orders:
