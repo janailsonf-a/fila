@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 const SESSION = "cinema-1";
-const MOVIE = "NEBULOSA";
-const META = "Sala 3 · 20:00 · Dublado";
-const SYNOPSIS = "Uma tripulação desperta à deriva numa nuvem estelar — e algo acordou junto.";
+const MOVIE = "Homem-Aranha: Novo Dia";
+const META = "Sala 3 · 20:00 · Dublado · IMAX";
+const SYNOPSIS = "Peter Parker recomeça do zero numa Nova York que esqueceu quem ele é.";
 const PRICE = "R$ 32,00";
 const TERMINAL = ["CONFIRMED", "REJECTED", "PAYMENT_FAILED"];
 
@@ -77,8 +77,8 @@ export default function Home() {
     <main className="mx-auto max-w-4xl px-4 py-14">
       {/* Card do filme */}
       <section className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur">
-        <div className="flex h-48 w-32 shrink-0 items-end justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-fuchsia-600 to-rose-500 p-2 text-4xl">
-          🎬
+        <div className="flex h-48 w-32 shrink-0 items-end justify-center rounded-xl bg-gradient-to-br from-red-600 via-rose-700 to-blue-700 p-2 text-4xl">
+          🕷️
         </div>
         <div className="min-w-0 py-1">
           <h1 className="text-3xl font-extrabold tracking-tight">{MOVIE}</h1>
