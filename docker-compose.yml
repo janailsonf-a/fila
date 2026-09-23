@@ -151,6 +151,16 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # API de leitura dos assentos (consumida pelo frontend p/ montar a sala)
+  inventory-api:
+    build: ./services/inventory
+    environment: *inventory-env
+    command: sh -c "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    restart: unless-stopped
+    depends_on:
+      mysql-inventory:
+        condition: service_healthy
+
   payment-worker:
     build: ./services/payment
     environment: *payment-env
@@ -202,8 +212,10 @@ services:
     build: ./web
     environment:
       ORDERS_API_URL: http://orders:8000
+      INVENTORY_API_URL: http://inventory-api:8000
     ports:
       - "3002:3000"
     restart: unless-stopped
     depends_on:
       - orders
+      - inventory-api
