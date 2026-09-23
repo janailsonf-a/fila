@@ -103,6 +103,18 @@ curl -s -X POST http://localhost:8080/api/orders \
 - **MySQL 8** — um banco por serviço com estado
 - **Docker / Docker Compose** — orquestração local
 
+## Observability
+
+`docker compose up` também sobe **Prometheus** + **Grafana** com o plugin de
+métricas do RabbitMQ ligado:
+
+- Grafana: http://localhost:3000 (anônimo em modo viewer; admin `admin`/`fila`)
+- Prometheus: http://localhost:9090
+
+Dashboard **"Fila — RabbitMQ / Filas"** já provisionado: profundidade das filas
+por serviço, taxa de publicação/entrega, conexões. Dá pra ver ao vivo as
+mensagens fluindo entre os serviços ao disparar pedidos.
+
 ## Deploy na Azure (IaC)
 
 Toda a infra é Terraform em [`infra/terraform`](infra/terraform) e o CI/CD em
