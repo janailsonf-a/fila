@@ -197,3 +197,13 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+
+  web:
+    build: ./web
+    environment:
+      ORDERS_API_URL: http://orders:8000
+    ports:
+      - "3002:3000"
+    restart: unless-stopped
+    depends_on:
+      - orders
