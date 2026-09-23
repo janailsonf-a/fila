@@ -97,8 +97,29 @@ curl -s -X POST http://localhost:8080/api/orders \
 - **MySQL 8** — um banco por serviço com estado
 - **Docker / Docker Compose** — orquestração local
 
+## Deploy na Azure (IaC)
+
+Toda a infra é Terraform em [`infra/terraform`](infra/terraform) e o CI/CD em
+[`.github/workflows`](.github/workflows) (build das imagens → ACR via OIDC, sem
+segredo salvo). Ver [`docs/CICD.md`](docs/CICD.md).
+
+Estado do deploy:
+
+- ✅ Base provisionada (ACR, Key Vault, Log Analytics, Container Apps Environment)
+- ✅ Imagens buildadas e publicadas no ACR pelo GitHub Actions
+- ✅ Definição dos Container Apps (rabbitmq + mysql + orders + 4 workers) com
+  autoescala **KEDA** por fila do RabbitMQ — `terraform validate` OK
+
+> **Nota (Azure for Students):** o deploy final dos Container Apps esbarra em
+> limites da assinatura *Students*: o Container Apps Environment é do tipo
+> *express*, que **não suporta TCP ingress** (necessário para RabbitMQ:5672 e
+> MySQL:3306) nem pull do ACR por *managed identity*; e o **MySQL Flexible
+> gerenciado** não tem capacidade nas regiões permitidas pela policy da conta.
+> O IaC está correto e completo — em uma assinatura padrão (Pay-As-You-Go /
+> empresarial) o `terraform apply -var deploy_apps=true` sobe o ambiente inteiro.
+> Para desenvolvimento e demonstração, use o `docker compose` acima, que executa
+> a stack completa localmente.
+
 ## Próximas fases
 
-3. IaC (Terraform) na Azure · 4. CI (GitHub Actions + OIDC) ·
-5. Deploy Azure Container Apps + KEDA · 6. CD staging→prod ·
-7. Observability (OpenTelemetry + Grafana) · 8. Polish.
+6. CD staging→prod · 7. Observability (OpenTelemetry + Grafana) · 8. Polish.

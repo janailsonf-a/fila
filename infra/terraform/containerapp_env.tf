@@ -7,4 +7,11 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   tags                       = var.tags
+
+  # Perfil Consumption explícito → ambiente "workload profiles" (não express),
+  # necessário para TCP ingress (rabbitmq/mysql) e pull do ACR por identidade.
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
 }

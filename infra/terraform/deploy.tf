@@ -3,8 +3,9 @@
 # deploy_apps=true (cria os apps abaixo).
 
 locals {
-  acr           = azurerm_container_registry.main.login_server
-  rabbit_uri    = "amqp://fila:${var.rabbitmq_password}@rabbitmq:5672/"
+  acr        = azurerm_container_registry.main.login_server
+  rabbit_uri = "amqp://fila:${var.rabbitmq_password}@rabbitmq:5672/"
+
   rabbit_secret = { "rabbitmq-password" = var.rabbitmq_password }
   db_secret     = { "db-password" = var.mysql_admin_password }
   uri_secret    = { "rabbitmq-uri" = local.rabbit_uri }
@@ -31,111 +32,137 @@ locals {
     notification = "base64:013l9EZh7SaJv5pSeGxr4etnbq/9sx2rzt+XApMagag="
   }
 
+  # Todos os apps têm o MESMO tipo (map(string) nos envs/secrets, listas no
+  # command, ingress achatado em campos) — necessário p/ for_each/ternário.
   apps = {
-    # Broker — imagem pública, ingress TCP interno.
     rabbitmq = {
-      image_from_acr = false
-      image          = "rabbitmq:3-management"
-      command        = null
-      min            = 1
-      max            = 1
-      cpu            = 0.5
-      memory         = "1Gi"
-      ingress        = { external = false, transport = "tcp", target_port = 5672, exposed_port = 5672 }
-      env            = { RABBITMQ_DEFAULT_USER = "fila" }
-      secret_env     = { RABBITMQ_DEFAULT_PASS = "rabbitmq-password" }
-      secrets        = local.rabbit_secret
-      scale_queue    = null
+      image_from_acr       = false
+      image                = "rabbitmq:3-management"
+      command              = []
+      min                  = 1
+      max                  = 1
+      cpu                  = 0.5
+      memory               = "1Gi"
+      ingress_enabled      = true
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 5672
+      ingress_exposed_port = 5672
+      env                  = tomap({ RABBITMQ_DEFAULT_USER = "fila" })
+      secret_env           = tomap({ RABBITMQ_DEFAULT_PASS = "rabbitmq-password" })
+      secrets              = tomap(local.rabbit_secret)
+      scale_queue          = ""
     }
 
-    # MySQL (imagem custom cria os 3 bancos), ingress TCP interno.
-    # Efêmero: sem persistência (limite Students; re-migra no boot).
     mysql = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-mysql:latest"
-      command        = null
-      min            = 1
-      max            = 1
-      cpu            = 0.5
-      memory         = "1Gi"
-      ingress        = { external = false, transport = "tcp", target_port = 3306, exposed_port = 3306 }
-      env            = { MYSQL_DATABASE = "orders", MYSQL_USER = var.mysql_admin_user }
-      secret_env     = { MYSQL_PASSWORD = "db-password", MYSQL_ROOT_PASSWORD = "mysql-root" }
-      secrets        = { "db-password" = var.mysql_admin_password, "mysql-root" = var.mysql_admin_password }
-      scale_queue    = null
+      image_from_acr       = true
+      image                = "${local.acr}/fila-mysql:latest"
+      command              = []
+      min                  = 1
+      max                  = 1
+      cpu                  = 0.5
+      memory               = "1Gi"
+      ingress_enabled      = true
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 3306
+      ingress_exposed_port = 3306
+      env                  = tomap({ MYSQL_DATABASE = "orders", MYSQL_USER = var.mysql_admin_user })
+      secret_env           = tomap({ MYSQL_PASSWORD = "db-password", MYSQL_ROOT_PASSWORD = "mysql-root" })
+      secrets              = tomap({ "db-password" = var.mysql_admin_password, "mysql-root" = var.mysql_admin_password })
+      scale_queue          = ""
     }
 
-    # API HTTP — orquestrador.
     orders = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-orders:latest"
-      command        = ["sh", "-c", "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"]
-      min            = 1
-      max            = 3
-      cpu            = 0.25
-      memory         = "0.5Gi"
-      ingress        = { external = true, transport = "auto", target_port = 8000, exposed_port = null }
-      env            = merge(local.mysql_env["orders"], { APP_KEY = local.app_keys.orders })
-      secret_env     = { DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" }
-      secrets        = merge(local.db_secret, local.rabbit_secret)
-      scale_queue    = null
+      image_from_acr       = true
+      image                = "${local.acr}/fila-orders:latest"
+      command              = ["sh", "-c", "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"]
+      min                  = 1
+      max                  = 3
+      cpu                  = 0.25
+      memory               = "0.5Gi"
+      ingress_enabled      = true
+      ingress_external     = true
+      ingress_transport    = "auto"
+      ingress_target_port  = 8000
+      ingress_exposed_port = 0
+      env                  = tomap(merge(local.mysql_env["orders"], { APP_KEY = local.app_keys.orders }))
+      secret_env           = tomap({ DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" })
+      secrets              = tomap(merge(local.db_secret, local.rabbit_secret))
+      scale_queue          = ""
     }
 
     "orders-worker" = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-orders:latest"
-      command        = ["sh", "-c", "php artisan queue:work rabbitmq --queue=orders --tries=3"]
-      min            = 0
-      max            = 5
-      cpu            = 0.25
-      memory         = "0.5Gi"
-      ingress        = null
-      env            = merge(local.mysql_env["orders"], { APP_KEY = local.app_keys.orders })
-      secret_env     = { DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" }
-      secrets        = merge(local.db_secret, local.rabbit_secret, local.uri_secret)
-      scale_queue    = "orders"
+      image_from_acr       = true
+      image                = "${local.acr}/fila-orders:latest"
+      command              = ["sh", "-c", "php artisan queue:work rabbitmq --queue=orders --tries=3"]
+      min                  = 0
+      max                  = 5
+      cpu                  = 0.25
+      memory               = "0.5Gi"
+      ingress_enabled      = false
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 0
+      ingress_exposed_port = 0
+      env                  = tomap(merge(local.mysql_env["orders"], { APP_KEY = local.app_keys.orders }))
+      secret_env           = tomap({ DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" })
+      secrets              = tomap(merge(local.db_secret, local.rabbit_secret, local.uri_secret))
+      scale_queue          = "orders"
     }
 
     "inventory-worker" = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-inventory:latest"
-      command        = ["sh", "-c", "php artisan migrate --seed --force && php artisan queue:work rabbitmq --queue=inventory --tries=3"]
-      min            = 0
-      max            = 5
-      cpu            = 0.25
-      memory         = "0.5Gi"
-      ingress        = null
-      env            = merge(local.mysql_env["inventory"], { APP_KEY = local.app_keys.inventory })
-      secret_env     = { DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" }
-      secrets        = merge(local.db_secret, local.rabbit_secret, local.uri_secret)
-      scale_queue    = "inventory"
+      image_from_acr       = true
+      image                = "${local.acr}/fila-inventory:latest"
+      command              = ["sh", "-c", "php artisan migrate --seed --force && php artisan queue:work rabbitmq --queue=inventory --tries=3"]
+      min                  = 0
+      max                  = 5
+      cpu                  = 0.25
+      memory               = "0.5Gi"
+      ingress_enabled      = false
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 0
+      ingress_exposed_port = 0
+      env                  = tomap(merge(local.mysql_env["inventory"], { APP_KEY = local.app_keys.inventory }))
+      secret_env           = tomap({ DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" })
+      secrets              = tomap(merge(local.db_secret, local.rabbit_secret, local.uri_secret))
+      scale_queue          = "inventory"
     }
 
     "payment-worker" = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-payment:latest"
-      command        = ["sh", "-c", "php artisan migrate --force && php artisan queue:work rabbitmq --queue=payment --tries=3"]
-      min            = 0
-      max            = 5
-      cpu            = 0.25
-      memory         = "0.5Gi"
-      ingress        = null
-      env            = merge(local.mysql_env["payment"], { APP_KEY = local.app_keys.payment })
-      secret_env     = { DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" }
-      secrets        = merge(local.db_secret, local.rabbit_secret, local.uri_secret)
-      scale_queue    = "payment"
+      image_from_acr       = true
+      image                = "${local.acr}/fila-payment:latest"
+      command              = ["sh", "-c", "php artisan migrate --force && php artisan queue:work rabbitmq --queue=payment --tries=3"]
+      min                  = 0
+      max                  = 5
+      cpu                  = 0.25
+      memory               = "0.5Gi"
+      ingress_enabled      = false
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 0
+      ingress_exposed_port = 0
+      env                  = tomap(merge(local.mysql_env["payment"], { APP_KEY = local.app_keys.payment }))
+      secret_env           = tomap({ DB_PASSWORD = "db-password", RABBITMQ_PASSWORD = "rabbitmq-password" })
+      secrets              = tomap(merge(local.db_secret, local.rabbit_secret, local.uri_secret))
+      scale_queue          = "payment"
     }
 
     "notification-worker" = {
-      image_from_acr = true
-      image          = "${local.acr}/fila-notification:latest"
-      command        = ["sh", "-c", "php artisan migrate --force && php artisan queue:work rabbitmq --queue=notification --tries=3"]
-      min            = 0
-      max            = 5
-      cpu            = 0.25
-      memory         = "0.5Gi"
-      ingress        = null
-      env = {
+      image_from_acr       = true
+      image                = "${local.acr}/fila-notification:latest"
+      command              = ["sh", "-c", "php artisan migrate --force && php artisan queue:work rabbitmq --queue=notification --tries=3"]
+      min                  = 0
+      max                  = 5
+      cpu                  = 0.25
+      memory               = "0.5Gi"
+      ingress_enabled      = false
+      ingress_external     = false
+      ingress_transport    = "tcp"
+      ingress_target_port  = 0
+      ingress_exposed_port = 0
+      env = tomap({
         APP_ENV          = "production"
         APP_DEBUG        = "false"
         APP_KEY          = local.app_keys.notification
@@ -145,9 +172,9 @@ locals {
         RABBITMQ_HOST    = "rabbitmq"
         RABBITMQ_PORT    = "5672"
         RABBITMQ_USER    = "fila"
-      }
-      secret_env  = { RABBITMQ_PASSWORD = "rabbitmq-password" }
-      secrets     = merge(local.rabbit_secret, local.uri_secret)
+      })
+      secret_env  = tomap({ RABBITMQ_PASSWORD = "rabbitmq-password" })
+      secrets     = tomap(merge(local.rabbit_secret, local.uri_secret))
       scale_queue = "notification"
     }
   }
@@ -163,6 +190,7 @@ resource "azurerm_container_app" "app" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = var.tags
 
   identity {
@@ -172,13 +200,14 @@ resource "azurerm_container_app" "app" {
   dynamic "registry" {
     for_each = each.value.image_from_acr ? [1] : []
     content {
-      server   = local.acr
-      identity = "system"
+      server               = local.acr
+      username             = azurerm_container_registry.main.admin_username
+      password_secret_name = "acr-password"
     }
   }
 
   dynamic "secret" {
-    for_each = each.value.secrets
+    for_each = each.value.image_from_acr ? merge(each.value.secrets, { "acr-password" = azurerm_container_registry.main.admin_password }) : each.value.secrets
     content {
       name  = secret.key
       value = secret.value
@@ -186,12 +215,12 @@ resource "azurerm_container_app" "app" {
   }
 
   dynamic "ingress" {
-    for_each = each.value.ingress != null ? [each.value.ingress] : []
+    for_each = each.value.ingress_enabled ? [1] : []
     content {
-      external_enabled = ingress.value.external
-      transport        = ingress.value.transport
-      target_port      = ingress.value.target_port
-      exposed_port     = ingress.value.exposed_port
+      external_enabled = each.value.ingress_external
+      transport        = each.value.ingress_transport
+      target_port      = each.value.ingress_target_port
+      exposed_port     = each.value.ingress_exposed_port > 0 ? each.value.ingress_exposed_port : null
 
       traffic_weight {
         latest_revision = true
@@ -205,11 +234,11 @@ resource "azurerm_container_app" "app" {
     max_replicas = each.value.max
 
     container {
-      name    = each.key
+      name    = replace(each.key, "_", "-")
       image   = each.value.image
       cpu     = each.value.cpu
       memory  = each.value.memory
-      command = each.value.command == null ? [] : each.value.command
+      command = each.value.command
 
       dynamic "env" {
         for_each = each.value.env
@@ -229,7 +258,7 @@ resource "azurerm_container_app" "app" {
     }
 
     dynamic "custom_scale_rule" {
-      for_each = each.value.scale_queue != null ? [each.value.scale_queue] : []
+      for_each = each.value.scale_queue != "" ? [each.value.scale_queue] : []
       content {
         name             = "rabbitmq-${custom_scale_rule.value}"
         custom_rule_type = "rabbitmq"
@@ -245,15 +274,6 @@ resource "azurerm_container_app" "app" {
       }
     }
   }
-}
-
-# Permite cada app puxar imagem do ACR (pull por managed identity).
-resource "azurerm_role_assignment" "acr_pull" {
-  for_each = local.acr_apps_effective
-
-  scope                = azurerm_container_registry.main.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_container_app.app[each.key].identity[0].principal_id
 }
 
 output "orders_url" {

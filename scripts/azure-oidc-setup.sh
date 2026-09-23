@@ -40,8 +40,21 @@ create_fic () {
     \"audiences\": [\"api://AzureADTokenExchange\"]
   }" >/dev/null
 }
+# Algumas contas do GitHub apresentam o subject OIDC com IDs numéricos
+# (repo:owner@<ownerid>/repo@<repoid>:...). Criamos as duas variantes para
+# funcionar em qualquer caso.
+OWNER="${REPO%%/*}"
+NAME="${REPO##*/}"
+REPO_JSON="$(curl -s "https://api.github.com/repos/${REPO}")"
+OWNER_ID="$(echo "$REPO_JSON" | python3 -c 'import sys,json;print(json.load(sys.stdin)["owner"]["id"])' 2>/dev/null || true)"
+REPO_ID="$(echo "$REPO_JSON" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])' 2>/dev/null || true)"
+
 create_fic "fila-main" "repo:${REPO}:ref:refs/heads/main"
 create_fic "fila-pr"   "repo:${REPO}:pull_request"
+if [ -n "$OWNER_ID" ] && [ -n "$REPO_ID" ]; then
+  create_fic "fila-main-id" "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:ref:refs/heads/main"
+  create_fic "fila-pr-id"   "repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}:pull_request"
+fi
 
 echo ">> Permissão AcrPush no ACR"
 az role assignment create \
