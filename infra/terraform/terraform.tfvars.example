@@ -1,0 +1,9 @@
+# Copie para terraform.tfvars (NÃO commitar) ou use variáveis de ambiente:
+#   export TF_VAR_mysql_admin_password="..."
+#   export TF_VAR_rabbitmq_password="..."
+
+# project  = "fila"
+# location = "brazilsouth"
+
+mysql_admin_password = "troque-por-uma-senha-forte"
+rabbitmq_password    = "troque-por-uma-senha-forte"
