@@ -1,0 +1,67 @@
+name: CD
+
+# Deploy contínuo na VM (staging → production com aprovação manual).
+# Deploy sem SSH key: usa `az vm run-command` autenticado por OIDC.
+# Trigger manual porque a VM fica desligada fora das demos (economia de crédito).
+# Requer: VM ligada + vars AZURE_* / VM_RG / VM_NAME + Environments
+# "staging" e "production" (production com required reviewer).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy na VM
+        run: |
+          az vm run-command invoke \
+            -g "${{ vars.VM_RG }}" -n "${{ vars.VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "cd /opt/fila && git pull --rebase && docker compose up -d --build"
+
+      - name: Smoke test (API responde)
+        run: |
+          IP=$(az vm show -d -g "${{ vars.VM_RG }}" -n "${{ vars.VM_NAME }}" --query publicIps -o tsv)
+          echo "VM IP: $IP"
+          for i in $(seq 1 24); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$IP:8080/up" || true)
+            echo "tentativa $i: $code"
+            [ "$code" = "200" ] && echo "staging OK" && exit 0
+            sleep 10
+          done
+          echo "smoke test falhou"; exit 1
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment: production   # gate: exige aprovação manual (required reviewer)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Promover release (verificação final)
+        run: |
+          IP=$(az vm show -d -g "${{ vars.VM_RG }}" -n "${{ vars.VM_NAME }}" --query publicIps -o tsv)
+          echo "Promovendo release aprovada em http://$IP:8080"
+          curl -fsS --max-time 8 "http://$IP:8080/up" && echo "produção verde ✅"
