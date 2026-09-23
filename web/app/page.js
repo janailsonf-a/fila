@@ -1,37 +1,32 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const SESSION = "cinema-1";
 const MOVIE = "NEBULOSA";
-const SHOWTIME = "Sala 3 · 20:00";
+const META = "Sala 3 · 20:00 · Dublado";
+const SYNOPSIS = "Uma tripulação desperta à deriva numa nuvem estelar — e algo acordou junto.";
+const PRICE = "R$ 32,00";
 const TERMINAL = ["CONFIRMED", "REJECTED", "PAYMENT_FAILED"];
 
-const STATUS_LABEL = {
-  PENDING: "Reservando…",
-  RESERVED: "Pagando…",
-  CONFIRMED: "Confirmado ✅",
-  REJECTED: "Recusado ❌",
-  PAYMENT_FAILED: "Pagamento falhou — assento liberado ↩️",
-};
-const STATUS_COLOR = {
-  PENDING: "#eab308",
-  RESERVED: "#3b82f6",
-  CONFIRMED: "#22c55e",
-  REJECTED: "#ef4444",
-  PAYMENT_FAILED: "#f97316",
+const BANNER = {
+  PENDING: ["Reservando assento…", "bg-amber-500/15 text-amber-300 border-amber-500/30"],
+  RESERVED: ["Processando pagamento…", "bg-blue-500/15 text-blue-300 border-blue-500/30"],
+  CONFIRMED: ["Ingresso confirmado ✅", "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"],
+  REJECTED: ["Assento indisponível ❌", "bg-rose-500/15 text-rose-300 border-rose-500/30"],
+  PAYMENT_FAILED: ["Pagamento falhou — assento liberado ↩️", "bg-orange-500/15 text-orange-300 border-orange-500/30"],
 };
 
 export default function Home() {
   const [seats, setSeats] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [failPay, setFailPay] = useState(false);
-  const [busySeat, setBusySeat] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState(null);
 
   const loadSeats = useCallback(async () => {
     try {
-      const r = await fetch(`/api/seats?session=${SESSION}`, { cache: "no-store" });
-      const data = await r.json();
+      const data = await (await fetch(`/api/seats?session=${SESSION}`, { cache: "no-store" })).json();
       if (Array.isArray(data)) setSeats(data);
     } catch {}
   }, []);
@@ -42,146 +37,153 @@ export default function Home() {
     return () => clearInterval(t);
   }, [loadSeats]);
 
-  async function buy(seatId) {
-    setBusySeat(seatId);
+  async function confirm() {
+    if (!selected) return;
+    const seatId = selected;
+    setBusy(true);
     setOrder({ seat: seatId, status: "PENDING" });
-    const userId = failPay ? "failuser" : "cliente";
     try {
-      const res = await fetch("/api/buy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: SESSION, seat_id: seatId, user_id: userId }),
-      });
-      const created = await res.json();
+      const created = await (
+        await fetch("/api/buy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: SESSION, seat_id: seatId, user_id: failPay ? "failuser" : "cliente" }),
+        })
+      ).json();
       if (!created.id) {
-        setOrder({ seat: seatId, status: "REJECTED", reason: "erro" });
-        setBusySeat(null);
+        setOrder({ seat: seatId, status: "REJECTED" });
         return;
       }
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 1200));
         const o = await (await fetch(`/api/order/${created.id}`)).json();
-        setOrder({ seat: seatId, status: o.status, reason: o.reason });
+        setOrder({ seat: seatId, status: o.status });
         loadSeats();
         if (TERMINAL.includes(o.status)) break;
       }
     } finally {
-      setBusySeat(null);
+      setBusy(false);
+      setSelected(null);
       loadSeats();
     }
   }
 
-  // agrupa por fileira (A, B, C...)
   const rows = {};
-  for (const s of seats) {
-    const row = s.seat_id[0];
-    (rows[row] ||= []).push(s);
-  }
-  for (const r of Object.values(rows)) r.sort((a, b) => a.seat_id.localeCompare(b.seat_id, undefined, { numeric: true }));
+  for (const s of seats) (rows[s.seat_id[0]] ||= []).push(s);
+  for (const r of Object.values(rows))
+    r.sort((a, b) => a.seat_id.localeCompare(b.seat_id, undefined, { numeric: true }));
 
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "40px 20px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-        <h1 style={{ fontSize: 28, margin: 0 }}>🎬 {MOVIE}</h1>
-        <span style={{ color: "#9aa3b8" }}>{SHOWTIME}</span>
-      </div>
-      <p style={{ color: "#9aa3b8", marginTop: 6 }}>
-        Escolha um assento. Acompanhe a <b>saga event-driven</b> em tempo real.
-      </p>
+    <main className="mx-auto max-w-3xl px-4 py-10">
+      {/* Card do filme */}
+      <section className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur">
+        <div className="flex h-36 w-24 shrink-0 items-end justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-fuchsia-600 to-rose-500 p-2 text-2xl">
+          🎬
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight">{MOVIE}</h1>
+          <p className="mt-0.5 text-sm text-slate-400">{META}</p>
+          <p className="mt-2 text-sm text-slate-300">{SYNOPSIS}</p>
+          <span className="mt-3 inline-block rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+            Ingresso {PRICE}
+          </span>
+        </div>
+      </section>
 
       {/* Tela */}
-      <div style={{ margin: "28px auto 8px", maxWidth: 520 }}>
-        <div
-          style={{
-            height: 10,
-            borderRadius: "50% 50% 6px 6px / 100% 100% 6px 6px",
-            background: "#e6e8ef",
-            boxShadow: "0 0 40px 6px rgba(230,232,239,.25)",
-          }}
-        />
-        <div style={{ textAlign: "center", color: "#6b7280", fontSize: 12, letterSpacing: 6, marginTop: 6 }}>
-          T E L A
-        </div>
+      <div className="mx-auto mt-10 max-w-md">
+        <div className="h-2 rounded-[100%] bg-gradient-to-b from-white to-slate-400 shadow-[0_0_50px_10px_rgba(255,255,255,0.25)]" />
+        <p className="mt-2 text-center text-xs tracking-[0.5em] text-slate-500">TELA</p>
       </div>
 
-      {/* Grade de assentos */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center", marginTop: 20 }}>
-        {Object.keys(rows).sort().map((row) => (
-          <div key={row} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span style={{ width: 16, color: "#6b7280", fontSize: 13 }}>{row}</span>
-            {rows[row].map((s) => {
-              const taken = s.status === "held" || s.status === "sold";
-              const processing = busySeat === s.seat_id;
-              const bg = processing ? "#eab308" : taken ? "#5b2a2a" : "#234b39";
-              const border = processing ? "#eab308" : taken ? "#7a3a3a" : "#2f6b4f";
-              return (
-                <button
-                  key={s.seat_id}
-                  disabled={taken || busySeat !== null}
-                  onClick={() => buy(s.seat_id)}
-                  title={`${s.seat_id} — ${taken ? "ocupado" : "livre"}`}
-                  style={{
-                    width: 34,
-                    height: 30,
-                    borderRadius: "6px 6px 3px 3px",
-                    border: `1px solid ${border}`,
-                    background: bg,
-                    color: "#e6e8ef",
-                    fontSize: 11,
-                    cursor: taken || busySeat ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {s.seat_id.slice(1)}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-        {seats.length === 0 && <div style={{ color: "#6b7280" }}>carregando sala…</div>}
+      {/* Mapa de assentos */}
+      <div className="mt-8 flex flex-col items-center gap-2.5">
+        {Object.keys(rows).sort().map((row) => {
+          const left = rows[row].filter((s) => Number(s.seat_id.slice(1)) <= 4);
+          const right = rows[row].filter((s) => Number(s.seat_id.slice(1)) > 4);
+          return (
+            <div key={row} className="flex items-center gap-4">
+              <span className="w-4 text-right text-xs text-slate-500">{row}</span>
+              <div className="flex gap-1.5">{left.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
+              <div className="w-6" />
+              <div className="flex gap-1.5">{right.map((s) => <Seat key={s.seat_id} s={s} selected={selected} busy={busy} onPick={setSelected} />)}</div>
+            </div>
+          );
+        })}
+        {seats.length === 0 && <p className="text-slate-500">carregando sala…</p>}
       </div>
 
       {/* Legenda */}
-      <div style={{ display: "flex", gap: 18, justifyContent: "center", marginTop: 22, fontSize: 13, color: "#9aa3b8" }}>
-        <Legend color="#234b39" label="Livre" />
-        <Legend color="#eab308" label="Processando" />
-        <Legend color="#5b2a2a" label="Ocupado" />
+      <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs text-slate-400">
+        <Legend cls="bg-emerald-900/50 border-emerald-600" label="Livre" />
+        <Legend cls="bg-indigo-500 border-indigo-300" label="Selecionado" />
+        <Legend cls="bg-rose-950 border-rose-900" label="Ocupado" />
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", margin: "22px 0" }}>
-        <input type="checkbox" checked={failPay} onChange={(e) => setFailPay(e.target.checked)} />
+      <label className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-300">
+        <input type="checkbox" checked={failPay} onChange={(e) => setFailPay(e.target.checked)} className="accent-indigo-500" />
         Simular falha no pagamento (dispara a compensação)
       </label>
 
+      {/* Banner de status */}
       {order && (
-        <div
-          style={{
-            margin: "0 auto",
-            maxWidth: 420,
-            padding: 16,
-            borderRadius: 12,
-            background: "#161a2c",
-            border: `1px solid ${STATUS_COLOR[order.status] || "#2b3350"}`,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ color: "#9aa3b8", fontSize: 13 }}>Assento {order.seat}</div>
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 800, color: STATUS_COLOR[order.status] || "#e6e8ef" }}>
-            {STATUS_LABEL[order.status] || order.status}
-          </div>
+        <div className={`mx-auto mt-6 max-w-md rounded-xl border px-4 py-3 text-center text-sm font-semibold ${(BANNER[order.status] || ["", "border-white/10 text-slate-300"])[1]}`}>
+          Assento {order.seat} · {(BANNER[order.status] || [order.status])[0]}
         </div>
       )}
 
-      <p style={{ marginTop: 40, textAlign: "center", color: "#5b6478", fontSize: 12 }}>
-        github.com/janailsonf-a/fila
-      </p>
+      {/* Barra de confirmação */}
+      <div className="sticky bottom-4 mx-auto mt-8 flex max-w-md items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/80 px-5 py-4 shadow-2xl backdrop-blur">
+        <div className="text-sm">
+          {selected ? (
+            <>
+              <span className="text-slate-400">Assento </span>
+              <span className="font-bold">{selected}</span>
+              <span className="text-slate-400"> · {PRICE}</span>
+            </>
+          ) : (
+            <span className="text-slate-500">Selecione um assento</span>
+          )}
+        </div>
+        <button
+          onClick={confirm}
+          disabled={!selected || busy}
+          className="rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+        >
+          {busy ? "Processando…" : "Confirmar compra"}
+        </button>
+      </div>
+
+      <p className="mt-10 text-center text-xs text-slate-600">github.com/janailsonf-a/fila</p>
     </main>
   );
 }
 
-function Legend({ color, label }) {
+function Seat({ s, selected, busy, onPick }) {
+  const taken = s.status === "held" || s.status === "sold";
+  const isSel = selected === s.seat_id;
+  const base = "h-8 w-8 rounded-t-lg border text-[10px] font-semibold transition";
+  const cls = taken
+    ? "bg-rose-950 border-rose-900 text-rose-800 cursor-not-allowed"
+    : isSel
+      ? "bg-indigo-500 border-indigo-300 text-white ring-2 ring-indigo-300/50"
+      : "bg-emerald-900/50 border-emerald-600 text-emerald-200 hover:bg-emerald-700 hover:text-white";
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, display: "inline-block" }} />
+    <button
+      disabled={taken || busy}
+      onClick={() => onPick(isSel ? null : s.seat_id)}
+      title={`${s.seat_id} — ${taken ? "ocupado" : "livre"}`}
+      className={`${base} ${cls} ${busy && !isSel ? "opacity-60" : ""}`}
+    >
+      {s.seat_id.slice(1)}
+    </button>
+  );
+}
+
+function Legend({ cls, label }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block h-3.5 w-3.5 rounded border ${cls}`} />
       {label}
     </span>
   );
