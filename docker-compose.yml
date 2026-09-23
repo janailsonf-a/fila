@@ -113,6 +113,7 @@ services:
     build: ./services/orders
     environment: *orders-env
     command: sh -c "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    restart: unless-stopped
     ports:
       - "8080:8000"
     depends_on:
@@ -125,6 +126,7 @@ services:
     build: ./services/orders
     environment: *orders-env
     command: php artisan queue:work rabbitmq --queue=orders --tries=3
+    restart: unless-stopped
     depends_on:
       orders:
         condition: service_started
@@ -135,6 +137,7 @@ services:
     build: ./services/inventory
     environment: *inventory-env
     command: sh -c "php artisan migrate --seed --force && php artisan queue:work rabbitmq --queue=inventory --tries=3"
+    restart: unless-stopped
     depends_on:
       mysql-inventory:
         condition: service_healthy
@@ -145,6 +148,7 @@ services:
     build: ./services/payment
     environment: *payment-env
     command: sh -c "php artisan migrate --force && php artisan queue:work rabbitmq --queue=payment --tries=3"
+    restart: unless-stopped
     depends_on:
       mysql-payment:
         condition: service_healthy
@@ -155,6 +159,7 @@ services:
     build: ./services/notification
     environment: *notification-env
     command: sh -c "php artisan migrate --force && php artisan queue:work rabbitmq --queue=notification --tries=3"
+    restart: unless-stopped
     depends_on:
       rabbitmq:
         condition: service_healthy
